@@ -1,0 +1,28 @@
+### 1. Testar se o servidor responde
+GET http://127.0.0.1:8080/
+
+### 2. Adicionar "Leite" à lista
+POST http://127.0.0.1:8080/shopping-list
+Content-Type: application/json
+
+{
+  "name": "Leite Meio Gordo",
+  "quantity": 2,
+  "category": "Laticínios"
+}
+
+### 3. Adicionar "Pão" à lista
+POST http://127.0.0.1:8080/shopping-list
+Content-Type: application/json
+
+{
+  "name": "Pão de Forma",
+  "quantity": 1
+}
+
+### 4. Ver a lista completa
+GET http://127.0.0.1:8080/shopping-list
+
+### 5. Ligar ao WebSocket (Simular Telemóvel)
+WEBSOCKET ws://127.0.0.1:8080/shopping-list/updates
+Content-Type: application/json // (Opcional, só para contexto)

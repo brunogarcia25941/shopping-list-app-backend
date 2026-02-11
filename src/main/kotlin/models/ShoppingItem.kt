@@ -10,5 +10,6 @@ data class ShoppingItem(
     val id: String = ObjectId().toString(), // Gera um ID automático do MongoDB
     val name: String,
     val quantity: Int,
-    val isBought: Boolean = false
+    val isBought: Boolean = false,
+    val category: String = "Geral"
 )
