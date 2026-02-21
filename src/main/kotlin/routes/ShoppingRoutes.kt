@@ -37,18 +37,36 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             collection.insertOne(item)
 
 
-            // Transformar o item novo em JSON string para enviar pelo socket
-            val jsonItem = kotlinx.serialization.json.Json.encodeToString(ShoppingItem.serializer(), item)
-
             sessions.forEach { session ->
-                // Envia a mensagem para cada telemóvel ligado
-                session.send(Frame.Text(jsonItem))
+                session.send(Frame.Text("REFRESH")) // Envia apenas um aviso
             }
 
             // Responde "OK, Criado" e devolve o item com o ID gerado
             call.respond(HttpStatusCode.Created, item)
         }
 
+        // 3. Rota para APAGAR um item (DELETE)
+        delete("/{id}") {
+            // Vai buscar o ID ao URL (ex: /shopping-list/12345)
+            val id = call.parameters["id"]
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, "ID em falta")
+                return@delete
+            }
+
+            // Apaga da base de dados (MongoDB)
+            val apagou = collection.deleteOneById(id).wasAcknowledged()
+
+            if (apagou) {
+                // Se apagou com sucesso, avisa toda a gente para atualizar a lista
+                sessions.forEach { session ->
+                    session.send(Frame.Text("REFRESH"))
+                }
+                call.respond(HttpStatusCode.OK, "Item apagado")
+            } else {
+                call.respond(HttpStatusCode.NotFound, "Item não encontrado")
+            }
+        }
         // Rota WebSocket: ws://localhost:8080/shopping-list/updates
         webSocket("/updates") {
             sessions.add(this) // alguem ligou-se e portanto adiciona à lista.
