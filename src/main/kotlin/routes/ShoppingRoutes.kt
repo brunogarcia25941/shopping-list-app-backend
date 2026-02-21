@@ -67,6 +67,32 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
                 call.respond(HttpStatusCode.NotFound, "Item não encontrado")
             }
         }
+
+        // 4. Rota para ATUALIZAR um item (PUT)
+        put("/{id}") {
+            val id = call.parameters["id"]
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, "ID em falta")
+                return@put
+            }
+
+            // Recebe a versão nova do item enviada pela app
+            val updatedItem = call.receive<ShoppingItem>()
+
+            // Substitui o item antigo por este novo na base de dados
+            val atualizou = collection.updateOneById(id, updatedItem).wasAcknowledged()
+
+            if (atualizou) {
+                // Se correu bem, avisa toda a gente para atualizar o ecrã
+                sessions.forEach { session ->
+                    session.send(Frame.Text("REFRESH"))
+                }
+                call.respond(HttpStatusCode.OK, updatedItem)
+            } else {
+                call.respond(HttpStatusCode.NotFound, "Item não encontrado")
+            }
+        }
+
         // Rota WebSocket: ws://localhost:8080/shopping-list/updates
         webSocket("/updates") {
             sessions.add(this) // alguem ligou-se e portanto adiciona à lista.
