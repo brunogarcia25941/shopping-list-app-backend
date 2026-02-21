@@ -1,7 +1,7 @@
 package com
 
 
-import com.routes.shoppingRoutes
+import routes.shoppingRoutes
 import io.ktor.server.application.*
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get

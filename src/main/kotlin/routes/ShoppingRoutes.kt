@@ -1,90 +1,62 @@
-package com.routes
+package routes
 
-import com.models.ShoppingItem // O teu modelo
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.websocket.webSocket
-import org.litote.kmongo.coroutine.CoroutineDatabase
-import java.util.*
+import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import models.ShoppingItem
+import org.litote.kmongo.coroutine.CoroutineDatabase
+import org.litote.kmongo.eq
+import java.util.concurrent.ConcurrentHashMap
 
-
-// Um conjunto (Set) seguro para guardar as sessões de quem está ligado
-val sessions = Collections.synchronizedSet<WebSocketSession?>(LinkedHashSet())
+// NOVA LÓGICA: Em vez de uma lista única de sessões, temos um "Dicionário" (Mapa)
+// que liga o "Código da Família" a uma "Lista de Telemóveis (Sessões)" ligados a ela.
+val familyRooms = ConcurrentHashMap<String, MutableList<DefaultWebSocketServerSession>>()
 
 fun Route.shoppingRoutes(db: CoroutineDatabase) {
-    // ir buscar a "tabela" (collection) de itens da base de dados
-    val collection = db.getCollection<ShoppingItem>()
+    val collection = db.getCollection<ShoppingItem>("shopping_items")
 
+    // Todas as rotas agora começam com /shopping-list/{familyCode}
+    route("/shopping-list/{familyCode}") {
 
-    route("/shopping-list") {
-
-        // 1. Rota para LER a lista (GET)
+        // 1. LER a lista daquela família específica (GET)
         get {
-            val items = collection.find().toList() // Vai ao Mongo e traz tudo
-            call.respond(items) // Envia para quem pediu (em JSON)
+            val familyCode = call.parameters["familyCode"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+            // Filtra no MongoDB: Só traz os itens onde familyCode == código do URL
+            val items = collection.find(ShoppingItem::familyCode eq familyCode).toList()
+            call.respond(HttpStatusCode.OK, items)
         }
 
-        // 2. Rota para CRIAR um item (POST)
+        // 2. CRIAR um item naquela família (POST)
         post {
-            // O servidor recebe o JSON e transforma em objeto ShoppingItem (ContentNegotiation)
+            val familyCode = call.parameters["familyCode"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val item = call.receive<ShoppingItem>()
 
-            // Guarda na base de dados
-            collection.insertOne(item)
+            // Garante que o item fica associado à família correta
+            val itemToSave = item.copy(familyCode = familyCode)
+            collection.insertOne(itemToSave)
 
-
-            sessions.forEach { session ->
-                session.send(Frame.Text("REFRESH")) // Envia apenas um aviso
+            // Avisa APENAS os telemóveis que estão na sala desta família
+            familyRooms[familyCode]?.forEach { session ->
+                session.send(Frame.Text("REFRESH"))
             }
 
-            // Responde "OK, Criado" e devolve o item com o ID gerado
-            call.respond(HttpStatusCode.Created, item)
+            call.respond(HttpStatusCode.Created, itemToSave)
         }
 
-        // 3. Rota para APAGAR um item (DELETE)
-        delete("/{id}") {
-            // Vai buscar o ID ao URL (ex: /shopping-list/12345)
-            val id = call.parameters["id"]
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, "ID em falta")
-                return@delete
-            }
-
-            // Apaga da base de dados (MongoDB)
-            val apagou = collection.deleteOneById(id).wasAcknowledged()
-
-            if (apagou) {
-                // Se apagou com sucesso, avisa toda a gente para atualizar a lista
-                sessions.forEach { session ->
-                    session.send(Frame.Text("REFRESH"))
-                }
-                call.respond(HttpStatusCode.OK, "Item apagado")
-            } else {
-                call.respond(HttpStatusCode.NotFound, "Item não encontrado")
-            }
-        }
-
-        // 4. Rota para ATUALIZAR um item (PUT)
+        // 3. ATUALIZAR um item (PUT)
         put("/{id}") {
-            val id = call.parameters["id"]
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, "ID em falta")
-                return@put
-            }
+            val familyCode = call.parameters["familyCode"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
 
-            // Recebe a versão nova do item enviada pela app
             val updatedItem = call.receive<ShoppingItem>()
-
-            // Substitui o item antigo por este novo na base de dados
-            val atualizou = collection.updateOneById(id, updatedItem).wasAcknowledged()
+            val atualizou = collection.updateOneById(id, updatedItem.copy(familyCode = familyCode)).wasAcknowledged()
 
             if (atualizou) {
-                // Se correu bem, avisa toda a gente para atualizar o ecrã
-                sessions.forEach { session ->
+                familyRooms[familyCode]?.forEach { session ->
                     session.send(Frame.Text("REFRESH"))
                 }
                 call.respond(HttpStatusCode.OK, updatedItem)
@@ -93,22 +65,44 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             }
         }
 
-        // Rota WebSocket: ws://localhost:8080/shopping-list/updates
-        webSocket("/updates") {
-            sessions.add(this) // alguem ligou-se e portanto adiciona à lista.
-            println("Nova conexão WebSocket! Total: ${sessions.size}")
+        // 4. APAGAR um item (DELETE)
+        delete("/{id}") {
+            val familyCode = call.parameters["familyCode"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
 
-            try {
-                // Mantém a conexão aberta à espera de mensagens (loop infinito)
-                for (frame in incoming) {
-                    // Por enquanto não fazemos nada com o que recebemos aqui
+            val apagou = collection.deleteOneById(id).wasAcknowledged()
+
+            if (apagou) {
+                familyRooms[familyCode]?.forEach { session ->
+                    session.send(Frame.Text("REFRESH"))
                 }
-            } finally {
-                // Alguém desligou-se ou a net caiu.
-                sessions.remove(this)
-                println("Conexão fechada. Total: ${sessions.size}")
+                call.respond(HttpStatusCode.OK, "Item apagado")
+            } else {
+                call.respond(HttpStatusCode.NotFound, "Item não encontrado")
             }
         }
 
+        // 5. WEBSOCKET - O "Túnel" específico desta família
+        webSocket("/updates") {
+            val familyCode = call.parameters["familyCode"] ?: return@webSocket
+
+            // Se a sala da família ainda não existir, cria-a
+            val room = familyRooms.computeIfAbsent(familyCode) { mutableListOf() }
+
+            // O teu telemóvel entra na sala
+            room.add(this)
+
+            try {
+                // Fica aqui parado a manter o túnel aberto...
+                for (frame in incoming) { }
+            } finally {
+                // Quando fechas a app, sais da sala
+                room.remove(this)
+                // Limpeza: Se a sala ficar vazia, apaga-a para poupar memória no servidor
+                if (room.isEmpty()) {
+                    familyRooms.remove(familyCode)
+                }
+            }
+        }
     }
 }

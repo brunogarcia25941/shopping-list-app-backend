@@ -1,4 +1,4 @@
-package com.models
+package models
 
 import kotlinx.serialization.Serializable
 import org.bson.codecs.pojo.annotations.BsonId
@@ -7,9 +7,11 @@ import org.bson.types.ObjectId
 @Serializable
 data class ShoppingItem(
     @BsonId
-    val id: String = ObjectId().toString(), // Gera um ID automático do MongoDB
+    val id: String = ObjectId().toString(),
     val name: String,
     val quantity: Int,
     val isBought: Boolean = false,
-    val category: String = "Geral"
+    val category: String = "Geral",
+    // Código único de 20 caracteres que identifica a casa
+    val familyCode: String = ""
 )
