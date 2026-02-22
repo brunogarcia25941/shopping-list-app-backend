@@ -35,8 +35,15 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             val familyCode = call.parameters["familyCode"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val item = call.receive<ShoppingItem>()
 
-            // Garante que o item fica associado à família correta
-            val itemToSave = item.copy(familyCode = familyCode)
+            // Se o ID vier vazio, geramos um novo ObjectId do MongoDB
+            val finalId = if (item.id.isBlank()) org.bson.types.ObjectId().toString() else item.id
+
+            // Garante que o item fica associado à família correta E com o ID correto
+            val itemToSave = item.copy(
+                id = finalId,
+                familyCode = familyCode
+            )
+
             collection.insertOne(itemToSave)
 
             // Avisa APENAS os telemóveis que estão na sala desta família
