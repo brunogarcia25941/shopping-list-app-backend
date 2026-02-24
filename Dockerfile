@@ -5,7 +5,7 @@ COPY . .
 # Dá permissão de execução ao ficheiro gradlew
 RUN chmod +x ./gradlew
 # Compila a aplicação
-RUN ./gradlew buildFatJar --no-daemon
+RUN ./gradlew buildFatJar -x test --no-daemon
 
 # Passo 2: Criar a imagem final super leve só para correr a app
 FROM eclipse-temurin:21-jre
