@@ -11,6 +11,7 @@ import models.ShoppingItem
 import org.litote.kmongo.coroutine.CoroutineDatabase
 import org.litote.kmongo.eq
 import java.util.concurrent.ConcurrentHashMap
+import org.litote.kmongo.and
 
 // NOVA LÓGICA: Em vez de uma lista única de sessões, temos um "Dicionário" (Mapa)
 // que liga o "Código da Família" a uma "Lista de Telemóveis (Sessões)" ligados a ela.
@@ -88,6 +89,30 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
                 call.respond(HttpStatusCode.NotFound, "Item não encontrado")
             }
         }
+
+        // 4.5 APAGAR TODOS OS COMPRADOS
+        delete("/bought") {
+            val familyCode = call.parameters["familyCode"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+
+            // Apaga todos os itens da família que tenham o isBought a true
+            val result = collection.deleteMany(
+                and(
+                    ShoppingItem::familyCode eq familyCode,
+                    ShoppingItem::isBought eq true
+                )
+            )
+
+            if (result.deletedCount > 0) {
+                // Avisa a sala para recarregar
+                familyRooms[familyCode]?.forEach { session ->
+                    session.send(Frame.Text("REFRESH"))
+                }
+                call.respond(HttpStatusCode.OK, "Itens apagados")
+            } else {
+                call.respond(HttpStatusCode.NotFound, "Nada para apagar")
+            }
+        }
+
 
         // 5. WEBSOCKET - O "Túnel" específico desta família
         webSocket("/updates") {
