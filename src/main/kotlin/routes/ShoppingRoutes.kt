@@ -1,5 +1,6 @@
 package routes
 
+import com.models.QuickSuggestion
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -30,6 +31,30 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             val items = collection.find(ShoppingItem::familyCode eq familyCode).toList()
             call.respond(HttpStatusCode.OK, items)
         }
+
+        // --- ROTAS DAS SUGESTÕES RÁPIDAS ---
+        get("/suggestions") {
+            val familyCode = call.parameters["familyCode"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+            val suggestions = db.getCollection<QuickSuggestion>("quick_suggestions")
+                .find(QuickSuggestion::familyCode eq familyCode).toList()
+            call.respond(HttpStatusCode.OK, suggestions)
+        }
+
+        post("/suggestions") {
+            val familyCode = call.parameters["familyCode"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+            val sug = call.receive<QuickSuggestion>()
+            val finalId = if (sug.id.isBlank()) org.bson.types.ObjectId().toString() else sug.id
+            val toSave = sug.copy(id = finalId, familyCode = familyCode)
+            db.getCollection<QuickSuggestion>("quick_suggestions").insertOne(toSave)
+            call.respond(HttpStatusCode.Created, toSave)
+        }
+
+        delete("/suggestions/{id}") {
+            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            db.getCollection<QuickSuggestion>("quick_suggestions").deleteOneById(id)
+            call.respond(HttpStatusCode.OK, "Sugestão apagada")
+        }
+        // -----------------------------------
 
         // 2. CRIAR um item naquela família (POST)
         post {
