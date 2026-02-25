@@ -13,5 +13,7 @@ data class ShoppingItem(
     val isBought: Boolean = false,
     val category: String = "Geral",
     // Código único de 20 caracteres que identifica a casa
-    val familyCode: String = ""
+    val familyCode: String = "",
+    val notes: String? = null,       // texto dos detalhes (ex: "Mimosa Magro")
+    val photoBase64: String? = null  // imagem comprimida em texto
 )
