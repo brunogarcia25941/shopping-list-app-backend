@@ -13,11 +13,21 @@ import org.litote.kmongo.coroutine.CoroutineDatabase
 import org.litote.kmongo.eq
 import java.util.concurrent.ConcurrentHashMap
 import org.litote.kmongo.and
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 
 // NOVA LÓGICA: Em vez de uma lista única de sessões, temos um "Dicionário" (Mapa)
 // que liga o "Código da Família" a uma "Lista de Telemóveis (Sessões)" ligados a ela.
 val familyRooms = ConcurrentHashMap<String, MutableList<DefaultWebSocketServerSession>>()
+
+@Serializable
+data class WsMessage(
+    val action: String, // "ADD", "UPDATE", "DELETE", "DELETE_BOUGHT"
+    val item: ShoppingItem? = null,
+    val itemId: String? = null
+)
 
 fun Route.shoppingRoutes(db: CoroutineDatabase) {
     val collection = db.getCollection<ShoppingItem>("shopping_items")
@@ -75,9 +85,8 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             collection.insertOne(itemToSave)
 
             // Avisa APENAS os telemóveis que estão na sala desta família
-            familyRooms[familyCode]?.forEach { session ->
-                session.send(Frame.Text("REFRESH"))
-            }
+            val msg = Json.encodeToString(WsMessage("ADD", item = itemToSave))
+            familyRooms[familyCode]?.forEach { session -> session.send(Frame.Text(msg)) }
 
             call.respond(HttpStatusCode.Created, itemToSave)
         }
@@ -91,9 +100,8 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             val atualizou = collection.updateOneById(id, updatedItem.copy(familyCode = familyCode)).wasAcknowledged()
 
             if (atualizou) {
-                familyRooms[familyCode]?.forEach { session ->
-                    session.send(Frame.Text("REFRESH"))
-                }
+                val msg = Json.encodeToString(WsMessage("UPDATE", item = updatedItem))
+                familyRooms[familyCode]?.forEach { session -> session.send(Frame.Text(msg)) }
                 call.respond(HttpStatusCode.OK, updatedItem)
             } else {
                 call.respond(HttpStatusCode.NotFound, "Item não encontrado")
@@ -108,9 +116,8 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             val apagou = collection.deleteOneById(id).wasAcknowledged()
 
             if (apagou) {
-                familyRooms[familyCode]?.forEach { session ->
-                    session.send(Frame.Text("REFRESH"))
-                }
+                val msg = Json.encodeToString(WsMessage("DELETE", itemId = id))
+                familyRooms[familyCode]?.forEach { session -> session.send(Frame.Text(msg)) }
                 call.respond(HttpStatusCode.OK, "Item apagado")
             } else {
                 call.respond(HttpStatusCode.NotFound, "Item não encontrado")
@@ -131,9 +138,8 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
 
             if (result.deletedCount > 0) {
                 // Avisa a sala para recarregar
-                familyRooms[familyCode]?.forEach { session ->
-                    session.send(Frame.Text("REFRESH"))
-                }
+                val msg = Json.encodeToString(WsMessage("DELETE_BOUGHT"))
+                familyRooms[familyCode]?.forEach { session -> session.send(Frame.Text(msg)) }
                 call.respond(HttpStatusCode.OK, "Itens apagados")
             } else {
                 call.respond(HttpStatusCode.NotFound, "Nada para apagar")
