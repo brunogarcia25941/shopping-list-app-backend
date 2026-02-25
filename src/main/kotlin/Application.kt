@@ -1,13 +1,17 @@
 package com
 
 
+import io.ktor.http.HttpStatusCode
 import routes.shoppingRoutes
 import io.ktor.server.application.*
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import io.ktor.server.routing.head
 import io.ktor.server.routing.routing
 import org.litote.kmongo.coroutine.coroutine
 import org.litote.kmongo.reactivestreams.KMongo
+
 
 fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
@@ -34,5 +38,10 @@ fun Application.module() {
         get("/") {
             call.respondText("Servidor de Compras a funcionar")
         }
+
+        head("/") {
+            call.respond(HttpStatusCode.OK)
+        }
+
     }
 }

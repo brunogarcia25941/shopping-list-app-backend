@@ -14,6 +14,7 @@ import org.litote.kmongo.eq
 import java.util.concurrent.ConcurrentHashMap
 import org.litote.kmongo.and
 
+
 // NOVA LÓGICA: Em vez de uma lista única de sessões, temos um "Dicionário" (Mapa)
 // que liga o "Código da Família" a uma "Lista de Telemóveis (Sessões)" ligados a ela.
 val familyRooms = ConcurrentHashMap<String, MutableList<DefaultWebSocketServerSession>>()
@@ -31,6 +32,7 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             val items = collection.find(ShoppingItem::familyCode eq familyCode).toList()
             call.respond(HttpStatusCode.OK, items)
         }
+
 
         // --- ROTAS DAS SUGESTÕES RÁPIDAS ---
         get("/suggestions") {
