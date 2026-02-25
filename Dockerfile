@@ -2,16 +2,20 @@
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 COPY . .
-# Dá permissão de execução ao ficheiro gradlew
 RUN chmod +x ./gradlew
-# Compila a aplicação
+
+# MAGIA: Obriga o Gradle a usar no máximo 256MB de RAM para não "crashar" o Render
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx256m'"
+
+# Compila a aplicação ignorando os testes
 RUN ./gradlew buildFatJar -x test --no-daemon
 
-# Passo 2: Criar a imagem final super leve só para correr a app
+# Passo 2: Criar a imagem final super leve
 FROM eclipse-temurin:21-jre
 EXPOSE 8080
 WORKDIR /app
-# Copia o ficheiro compilado do Passo 1
+
+# Copia o ficheiro compilado
 COPY --from=build /app/build/libs/*-all.jar app.jar
 
 # Comando para arrancar o servidor
