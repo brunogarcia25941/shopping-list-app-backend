@@ -27,4 +27,6 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     // Driver MongoDB para Kotlin (versão Coroutine para ser rápido)
     implementation("org.litote.kmongo:kmongo-coroutine:4.11.0")
+    // Plugin de CORS do Ktor
+    implementation("io.ktor:ktor-server-cors:2.3.12")
 }
