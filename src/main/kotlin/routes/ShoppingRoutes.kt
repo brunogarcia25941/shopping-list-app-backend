@@ -29,11 +29,22 @@ data class WsMessage(
     val itemId: String? = null
 )
 
+
+// Esta é uma imagem PNG real de 1x1 pixel, 100% transparente
+val DUMMY_PHOTO = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
+
 fun Route.shoppingRoutes(db: CoroutineDatabase) {
     val collection = db.getCollection<ShoppingItem>("shopping_items")
 
     // Todas as rotas agora começam com /shopping-list/{familyCode}
     route("/shopping-list/{familyCode}") {
+
+        // O NOSSO "KILL SWITCH"
+        // Atualmente exige a versão 1. No futuro, se partires a API, mudas este número para 2!
+        get("/api/config") {
+            call.respond(mapOf("minVersion" to 1))
+        }
 
         // 1. LER a lista daquela família específica (GET)
         get {
@@ -41,7 +52,7 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             // Filtra no MongoDB: Só traz os itens onde familyCode == código do URL
             // Trazemos os itens, mas usamos o .map para APAGAR a foto da memória antes de enviar para o telemóvel.
             val items = collection.find(ShoppingItem::familyCode eq familyCode).toList().map {
-                it.copy(photoBase64 = null)
+                it.copy(photoBase64 = if (it.photoBase64 != null) DUMMY_PHOTO else null)
             }
             call.respond(HttpStatusCode.OK, items)
         }
@@ -98,7 +109,7 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             collection.insertOne(itemToSave)
 
             // Avisa APENAS os telemóveis que estão na sala desta família
-            val msg = Json.encodeToString(WsMessage("ADD", item = itemToSave.copy(photoBase64 = null)))
+            val msg = Json.encodeToString(WsMessage("ADD", item = itemToSave.copy(photoBase64 = if (itemToSave.photoBase64 != null) DUMMY_PHOTO else null)))
             familyRooms[familyCode]?.forEach { session -> session.send(Frame.Text(msg)) }
 
             call.respond(HttpStatusCode.Created, itemToSave)
@@ -113,7 +124,7 @@ fun Route.shoppingRoutes(db: CoroutineDatabase) {
             val atualizou = collection.updateOneById(id, updatedItem.copy(familyCode = familyCode)).wasAcknowledged()
 
             if (atualizou) {
-                val msg = Json.encodeToString(WsMessage("UPDATE", item = updatedItem.copy(photoBase64 = null)))
+                val msg = Json.encodeToString(WsMessage("UPDATE", item = updatedItem.copy(photoBase64 = if (updatedItem.photoBase64 != null) DUMMY_PHOTO else null)))
                 familyRooms[familyCode]?.forEach { session -> session.send(Frame.Text(msg)) }
                 call.respond(HttpStatusCode.OK, updatedItem)
             } else {
